@@ -1,209 +1,33 @@
-import json
+import firebase_admin
+from firebase_admin import credentials, firestore
 import os
-import uuid
 
-# =========================================
-# DATABASE FILE
-# =========================================
-
-DB_FILE = "database.json"
-
-# =========================================
-# LOAD DATABASE
-# =========================================
-
-def load_db():
-
-    # Create empty database file
-    if not os.path.exists(DB_FILE):
-
-        with open(DB_FILE, "w") as f:
-            json.dump({}, f)
-
-    try:
-
-        with open(DB_FILE, "r") as f:
-            return json.load(f)
-
-    except:
-
-        return {}
-
-# =========================================
-# SAVE DATABASE
-# =========================================
-
-def save_db(db):
-
-    with open(DB_FILE, "w") as f:
-        json.dump(db, f, indent=2)
-
-# =========================================
-# ADD RECORD
-# =========================================
-
-def add_record(collection, record):
-
-    db = load_db()
-
-    # Create collection if missing
-    if collection not in db:
-        db[collection] = []
-
-    # =====================================
-    # DUPLICATE CHECK
-    # =====================================
-
-    for existing in db[collection]:
-
-        same_date = (
-            existing.get("date")
-            == record.get("date")
-        )
-
-        same_gross = (
-            float(existing.get("gross_earnings", 0))
-            == float(record.get("gross_earnings", 0))
-        )
-
-        same_user = (
-            existing.get("entered_by")
-            == record.get("entered_by")
-        )
-
-        # Prevent duplicate save
-        if same_date and same_gross and same_user:
-
-            return {
-                "success": False,
-                "message": (
-                    "Duplicate transaction detected. "
-                    "This transaction already exists."
-                )
-            }
-
-    # =====================================
-    # CREATE UNIQUE ID
-    # =====================================
-
-    record["_id"] = str(uuid.uuid4())
-
-    # =====================================
-    # SAVE RECORD
-    # =====================================
-
-    db[collection].append(record)
-
-    save_db(db)
-
-    return {
-        "success": True,
-        "message": "Transaction saved successfully.",
-        "record_id": record["_id"]
-    }
-
-# =========================================
-# GET ALL RECORDS
-# =========================================
-
-def get_records(collection):
-
-    db = load_db()
-
-    return db.get(collection, [])
-
-# =========================================
-# GET SINGLE RECORD
-# =========================================
-
-def get_record_by_id(collection, record_id):
-
-    db = load_db()
-
-    if collection not in db:
-        return None
-
-    for record in db[collection]:
-
-        if record.get("_id") == record_id:
-            return record
-
-    return None
-
-# =========================================
-# UPDATE RECORD
-# =========================================
-
-def update_record(collection, record_id, updated_record):
-
-    db = load_db()
-
-    if collection not in db:
-        return False
-
-    for i, record in enumerate(db[collection]):
-
-        if record.get("_id") == record_id:
-
-            # Preserve original ID
-            updated_record["_id"] = record_id
-
-            db[collection][i] = updated_record
-
-            save_db(db)
-
-            return True
-
-    return False
-
-# =========================================
-# DELETE RECORD
-# =========================================
-
-def delete_record(collection, record_id):
-
-    db = load_db()
-
-    if collection not in db:
-        return False
-
-    original_length = len(db[collection])
-
-    db[collection] = [
-
-        record for record in db[collection]
-
-        if record.get("_id") != record_id
-    ]
-
-    save_db(db)
-
-    return len(db[collection]) < original_length
-
-# =========================================
-# CLEAR COLLECTION
-# =========================================
-
-def clear_collection(collection):
-
-    db = load_db()
-
-    if collection in db:
-
-        db[collection] = []
-
-        save_db(db)
-
-        return True
-
-    return False
-
-# =========================================
-# COUNT RECORDS
-# =========================================
-
-def count_records(collection):
-
-    db = load_db()
-
-    return len(db.get(collection, []))
+_db = None
+
+def get_db():
+    global _db
+    if _db is None:
+        if not firebase_admin._apps:
+            key_path = os.path.join(os.path.dirname(__file__), "firebase_key.json")
+            cred = credentials.Certificate(key_path)
+            firebase_admin.initialize_app(cred)
+        _db = firestore.client()
+    return _db
+
+def add_record(table: str, record: dict):
+    db = get_db()
+    db.collection(table).add(record)
+
+def get_records(table: str) -> list:
+    db = get_db()
+    docs = db.collection(table).stream()
+    records = []
+    for doc in docs:
+        data = doc.to_dict()
+        data["_id"] = doc.id
+        records.append(data)
+    return records
+
+def update_record(table: str, doc_id: str, updated_data: dict):
+    db = get_db()
+    db.collection(table).document(doc_id).update(updated_data)
