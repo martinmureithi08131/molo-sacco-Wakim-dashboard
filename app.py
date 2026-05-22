@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from io import BytesIO
 from datetime import date
 from auth import render_login_page, delete_user, change_user_password, load_credentials, register_user
-from database import add_record, get_records
+from database import add_record, get_records, update_record
 
 st.set_page_config(
     page_title="MOLO SACCO – Daily Earnings",
@@ -382,6 +382,67 @@ if role == "admin":
                 if st.button("Reset Password", use_container_width=True):
                     ok, msg = change_user_password(reset_target, new_pw)
                     st.success(msg) if ok else st.error(msg)
+
+
+        st.markdown("---")
+        st.markdown('<div class="section-header">Edit Transaction</div>', unsafe_allow_html=True)
+        st.caption("Select a saved daily record to modify its values.")
+
+        all_tx = get_records("daily_earnings")
+        if not all_tx:
+            st.info("No transactions saved yet.")
+        else:
+            tx_labels = {
+                f"{r.get('date','?')}  |  Gross: {fmt_kes(r.get('gross_earnings',0))}  |  By: {r.get('entered_by','?')}  [id: {r['_id'][:6]}]": r
+                for r in sorted(all_tx, key=lambda x: x.get("date",""), reverse=True)
+            }
+            selected_label = st.selectbox("Select record to edit", list(tx_labels.keys()), key="edit_tx_select")
+            tx = tx_labels[selected_label]
+
+            with st.form("edit_tx_form"):
+                st.markdown(f"**Editing record for {tx.get('date','?')}**")
+                ec1, ec2 = st.columns(2)
+                with ec1:
+                    edit_date = st.date_input(
+                        "Date",
+                        value=pd.to_datetime(tx.get("date", str(date.today()))).date(),
+                        key="edit_date")
+                with ec2:
+                    edit_gross = st.number_input(
+                        "Gross Earnings (KES)",
+                        value=float(tx.get("gross_earnings", 0)),
+                        min_value=0.0, step=100.0, format="%.2f", key="edit_gross")
+
+                st.markdown("**Expenditures**")
+                existing_exps = tx.get("expenditures", [])
+                if not existing_exps:
+                    existing_exps = [{"description": "", "amount": 0.0}]
+
+                edited_exps = []
+                for ei, erow in enumerate(existing_exps):
+                    fa, fb = st.columns([3, 2])
+                    with fa:
+                        d = st.text_input(f"Description #{ei+1}", value=erow.get("description",""), key=f"edit_desc_{ei}")
+                    with fb:
+                        a = st.number_input(f"Amount (KES) #{ei+1}", value=float(erow.get("amount", 0)),
+                                            min_value=0.0, step=50.0, format="%.2f", key=f"edit_amt_{ei}")
+                    edited_exps.append({"description": d, "amount": a})
+
+                submitted = st.form_submit_button("Save Changes", type="primary", use_container_width=True)
+
+            if submitted:
+                valid_exps = [e for e in edited_exps if e["description"].strip()]
+                new_total_exp = sum(e["amount"] for e in valid_exps)
+                new_net = edit_gross - new_total_exp
+                update_record("daily_earnings", tx["_id"], {
+                    "date":               str(edit_date),
+                    "gross_earnings":     edit_gross,
+                    "expenditures":       valid_exps,
+                    "total_expenditures": new_total_exp,
+                    "net_daily_income":   new_net,
+                })
+                st.success(f"Record for {edit_date} updated successfully!")
+                st.rerun()
 
         st.markdown("---")
         st.info("Admin password is set in `auth.py` → `ADMIN_PASSWORD_HASH`.")
