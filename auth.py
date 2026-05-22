@@ -5,110 +5,182 @@ import os
 
 CREDENTIALS_FILE = "credentials.json"
 
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD_HASH = hashlib.sha256("admin1234".encode()).hexdigest()
+ADMIN_USERNAME = "Admin"
+ADMIN_PASSWORD_HASH = hashlib.sha256("Admin08131".encode()).hexdigest()
 
+
+# -----------------------------
+# PASSWORD HASHING
+# -----------------------------
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
+
+# -----------------------------
+# LOAD / SAVE CREDENTIALS
+# -----------------------------
 def load_credentials() -> dict:
     if os.path.exists(CREDENTIALS_FILE):
         with open(CREDENTIALS_FILE, "r") as f:
             return json.load(f)
     return {}
 
+
 def save_credentials(creds: dict):
     with open(CREDENTIALS_FILE, "w") as f:
         json.dump(creds, f, indent=2)
 
-def verify_user(username: str, password: str) -> str | None:
-    """Returns role: 'admin', 'user', or None if invalid."""
+
+# -----------------------------
+# AUTH CHECK
+# -----------------------------
+def verify_user(username: str, password: str):
     if username == ADMIN_USERNAME and hash_password(password) == ADMIN_PASSWORD_HASH:
         return "admin"
+
     creds = load_credentials()
     if username in creds and creds[username]["password"] == hash_password(password):
         return "user"
+
     return None
 
-def register_user(username: str, password: str) -> tuple[bool, str]:
+
+# -----------------------------
+# USER MANAGEMENT (ADMIN ONLY)
+# -----------------------------
+def register_user(username: str, password: str):
     if username == ADMIN_USERNAME:
-        return False, "Username reserved."
+        return False, "Username reserved for system admin."
+
     if len(username.strip()) < 3:
         return False, "Username must be at least 3 characters."
+
     if len(password) < 6:
         return False, "Password must be at least 6 characters."
+
     creds = load_credentials()
+
     if username in creds:
         return False, "Username already exists."
-    creds[username] = {"password": hash_password(password)}
-    save_credentials(creds)
-    return True, "Account created successfully!"
 
-def delete_user(username: str) -> tuple[bool, str]:
+    creds[username] = {
+        "password": hash_password(password),
+        "role": "user"
+    }
+
+    save_credentials(creds)
+    return True, "User created successfully!"
+
+
+def delete_user(username: str):
     creds = load_credentials()
+
     if username not in creds:
         return False, "User not found."
+
     del creds[username]
     save_credentials(creds)
+
     return True, f"User '{username}' deleted."
 
-def change_user_password(username: str, new_password: str) -> tuple[bool, str]:
-    if len(new_password) < 6:
-        return False, "Password must be at least 6 characters."
-    creds = load_credentials()
-    if username not in creds:
-        return False, "User not found."
-    creds[username]["password"] = hash_password(new_password)
-    save_credentials(creds)
-    return True, "Password updated."
 
+# -----------------------------
+# LOGIN PAGE
+# -----------------------------
 def render_login_page():
-    st.markdown("""
-    <style>
-    .login-wrap {
-        max-width: 420px; margin: 60px auto 0; padding: 40px 36px;
-        background: linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);
-        border-radius: 16px; color: white; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-    }
-    .login-wrap h2 { text-align:center; margin-bottom:4px; font-size:1.5rem; }
-    .login-wrap p  { text-align:center; opacity:.7; font-size:.85rem; margin-bottom:28px; }
-    </style>
-    <div class="login-wrap">
-      <h2>🚌 MOLO SACCO</h2>
-      <p>KBW 066S · Nakuru ↔ Naivasha · Cashflow Dashboard</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.title("🚌 MOLO SACCO LOGIN")
 
-    col = st.columns([1, 2, 1])[1]
-    with col:
-        mode = st.radio("", ["Login", "Create Account"], horizontal=True, label_visibility="collapsed")
-        st.markdown("<br>", unsafe_allow_html=True)
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
 
-        if mode == "Login":
-            username = st.text_input("Username", placeholder="Enter username")
-            password = st.text_input("Password", type="password", placeholder="Enter password")
-            if st.button("🔐 Login", use_container_width=True, type="primary"):
-                if not username or not password:
-                    st.error("Please enter both username and password.")
-                else:
-                    role = verify_user(username, password)
-                    if role:
-                        st.session_state["authenticated"] = True
-                        st.session_state["username"] = username
-                        st.session_state["role"] = role
-                        st.rerun()
-                    else:
-                        st.error("Invalid username or password.")
+    if st.button("Login"):
+        if not username or not password:
+            st.error("Please enter both fields.")
         else:
-            new_user = st.text_input("Choose a username", placeholder="min. 3 characters")
-            new_pass = st.text_input("Choose a password", type="password", placeholder="min. 6 characters")
-            new_pass2 = st.text_input("Confirm password", type="password", placeholder="Repeat password")
-            if st.button("✅ Create Account", use_container_width=True, type="primary"):
-                if new_pass != new_pass2:
-                    st.error("Passwords do not match.")
-                else:
-                    ok, msg = register_user(new_user, new_pass)
-                    if ok:
-                        st.success(msg + " You can now log in.")
-                    else:
-                        st.error(msg)
+            role = verify_user(username, password)
+
+            if role:
+                st.session_state["authenticated"] = True
+                st.session_state["username"] = username
+                st.session_state["role"] = role
+                st.rerun()
+            else:
+                st.error("Invalid username or password.")
+
+
+# -----------------------------
+# ADMIN PANEL
+# -----------------------------
+def render_admin_panel():
+    st.title("👑 Admin Dashboard")
+
+    st.subheader("Create New User")
+
+    new_user = st.text_input("New Username")
+    new_pass = st.text_input("New Password", type="password")
+
+    if st.button("Create User"):
+        ok, msg = register_user(new_user, new_pass)
+        if ok:
+            st.success(msg)
+        else:
+            st.error(msg)
+
+    st.divider()
+
+    st.subheader("All Users")
+    creds = load_credentials()
+    st.write(list(creds.keys()))
+
+    st.divider()
+
+    st.subheader("Delete User")
+
+    del_user = st.text_input("Username to delete")
+
+    if st.button("Delete User"):
+        ok, msg = delete_user(del_user)
+        if ok:
+            st.success(msg)
+        else:
+            st.error(msg)
+
+
+# -----------------------------
+# USER DASHBOARD
+# -----------------------------
+def render_user_dashboard():
+    st.title("📊 User Dashboard")
+    st.success(f"Welcome {st.session_state['username']} 👋")
+    st.write("You are logged in as a normal user.")
+
+
+# -----------------------------
+# MAIN APP
+# -----------------------------
+def main():
+
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+
+    if not st.session_state["authenticated"]:
+        render_login_page()
+        return
+
+    # Sidebar
+    st.sidebar.write(f"Logged in as: **{st.session_state['username']}**")
+    st.sidebar.write(f"Role: **{st.session_state['role']}**")
+
+    if st.sidebar.button("Logout"):
+        st.session_state.clear()
+        st.rerun()
+
+    # Role-based routing
+    if st.session_state["role"] == "admin":
+        render_admin_panel()
+    else:
+        render_user_dashboard()
+
+
+if __name__ == "__main__":
+    main()
