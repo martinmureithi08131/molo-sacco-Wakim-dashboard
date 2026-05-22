@@ -3,10 +3,6 @@ import hashlib
 import json
 import os
 
-# =========================================
-# CONFIG
-# =========================================
-
 CREDENTIALS_FILE = "credentials.json"
 
 ADMIN_USERNAME = "Admin"
@@ -15,71 +11,65 @@ ADMIN_PASSWORD_HASH = hashlib.sha256(
     "Admin08131".encode()
 ).hexdigest()
 
-# =========================================
-# HELPERS
-# =========================================
 
-def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+def hash_password(password):
+
+    return hashlib.sha256(
+        password.encode()
+    ).hexdigest()
 
 
-def load_credentials() -> dict:
+def load_credentials():
 
     try:
         if os.path.exists(CREDENTIALS_FILE):
+
             with open(CREDENTIALS_FILE, "r") as f:
                 return json.load(f)
+
     except:
         return {}
 
     return {}
 
 
-def save_credentials(creds: dict):
+def save_credentials(creds):
 
     with open(CREDENTIALS_FILE, "w") as f:
         json.dump(creds, f, indent=2)
 
 
-# =========================================
-# LOGIN VERIFICATION
-# =========================================
+def verify_user(username, password):
 
-def verify_user(username: str, password: str):
-
-    # Admin Login
     if (
         username == ADMIN_USERNAME
-        and hash_password(password) == ADMIN_PASSWORD_HASH
+        and hash_password(password)
+        == ADMIN_PASSWORD_HASH
     ):
         return "admin"
 
-    # Normal User Login
     creds = load_credentials()
 
     if (
         username in creds
-        and creds[username]["password"] == hash_password(password)
+        and creds[username]["password"]
+        == hash_password(password)
     ):
         return "user"
 
     return None
 
 
-# =========================================
-# USER MANAGEMENT
-# =========================================
-
-def register_user(username: str, password: str):
+def register_user(username, password):
 
     if username == ADMIN_USERNAME:
         return False, "Username reserved."
 
     if len(username.strip()) < 3:
-        return False, "Username must be at least 3 characters."
+        return False, "Username too short."
 
     if len(password) < 6:
-        return False, "Password must be at least 6 characters."
+        return False, "Password too short."
 
     creds = load_credentials()
 
@@ -95,7 +85,7 @@ def register_user(username: str, password: str):
     return True, "User created successfully."
 
 
-def delete_user(username: str):
+def delete_user(username):
 
     creds = load_credentials()
 
@@ -106,13 +96,10 @@ def delete_user(username: str):
 
     save_credentials(creds)
 
-    return True, f"User '{username}' deleted."
+    return True, "User deleted."
 
 
-def change_user_password(username: str, new_password: str):
-
-    if len(new_password) < 6:
-        return False, "Password must be at least 6 characters."
+def change_user_password(username, new_password):
 
     creds = load_credentials()
 
@@ -128,95 +115,74 @@ def change_user_password(username: str, new_password: str):
     return True, "Password updated."
 
 
-# =========================================
-# LOGIN PAGE
-# =========================================
-
 def render_login_page():
 
     st.markdown("""
     <style>
 
-    .login-wrap {
-        max-width: 420px;
-        margin: 60px auto 0;
-        padding: 40px 36px;
-        background: linear-gradient(
+    .login-wrap{
+        max-width:420px;
+        margin:70px auto;
+        padding:40px;
+        border-radius:16px;
+        background:linear-gradient(
             135deg,
             #1a1a2e,
             #16213e,
             #0f3460
         );
-        border-radius: 16px;
-        color: white;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-    }
-
-    .login-wrap h2 {
-        text-align:center;
-        margin-bottom:4px;
-        font-size:1.5rem;
-    }
-
-    .login-wrap p {
-        text-align:center;
-        opacity:.7;
-        font-size:.85rem;
-        margin-bottom:28px;
+        color:white;
     }
 
     </style>
+    """, unsafe_allow_html=True)
 
+    st.markdown("""
     <div class="login-wrap">
-      <h2>🚌 MOLO SACCO</h2>
-      <p>KBW 066S · Nakuru ↔ Naivasha · Cashflow Dashboard</p>
+
+    <h2 style="text-align:center;">
+    🚌 MOLO SACCO
+    </h2>
+
+    <p style="text-align:center;">
+    Cashflow Dashboard
+    </p>
+
     </div>
     """, unsafe_allow_html=True)
 
-    col = st.columns([1, 2, 1])[1]
+    col = st.columns([1,2,1])[1]
 
     with col:
 
         username = st.text_input(
-            "Username",
-            placeholder="Enter username"
+            "Username"
         )
 
         password = st.text_input(
             "Password",
-            type="password",
-            placeholder="Enter password"
+            type="password"
         )
 
         if st.button(
             "🔐 Login",
-            use_container_width=True,
-            type="primary"
+            use_container_width=True
         ):
 
-            if not username or not password:
+            role = verify_user(
+                username,
+                password
+            )
 
-                st.error(
-                    "Please enter both username and password."
-                )
+            if role:
+
+                st.session_state["authenticated"] = True
+                st.session_state["username"] = username
+                st.session_state["role"] = role
+
+                st.rerun()
 
             else:
-
-                role = verify_user(
-                    username,
-                    password
+                st.error(
+                    "Invalid username or password."
                 )
-
-                if role:
-
-                    st.session_state["authenticated"] = True
-                    st.session_state["username"] = username
-                    st.session_state["role"] = role
-
-                    st.rerun()
-
-                else:
-
-                    st.error(
-                        "Invalid username or password."
-                    )
