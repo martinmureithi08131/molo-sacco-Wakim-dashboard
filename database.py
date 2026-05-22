@@ -14,7 +14,7 @@ DB_FILE = "database.json"
 
 def load_db():
 
-    # Create empty database if missing
+    # Create empty database file
     if not os.path.exists(DB_FILE):
 
         with open(DB_FILE, "w") as f:
@@ -50,15 +50,57 @@ def add_record(collection, record):
     if collection not in db:
         db[collection] = []
 
-    # Generate unique transaction ID
+    # =====================================
+    # DUPLICATE CHECK
+    # =====================================
+
+    for existing in db[collection]:
+
+        same_date = (
+            existing.get("date")
+            == record.get("date")
+        )
+
+        same_gross = (
+            float(existing.get("gross_earnings", 0))
+            == float(record.get("gross_earnings", 0))
+        )
+
+        same_user = (
+            existing.get("entered_by")
+            == record.get("entered_by")
+        )
+
+        # Prevent duplicate save
+        if same_date and same_gross and same_user:
+
+            return {
+                "success": False,
+                "message": (
+                    "Duplicate transaction detected. "
+                    "This transaction already exists."
+                )
+            }
+
+    # =====================================
+    # CREATE UNIQUE ID
+    # =====================================
+
     record["_id"] = str(uuid.uuid4())
 
-    # Save record
+    # =====================================
+    # SAVE RECORD
+    # =====================================
+
     db[collection].append(record)
 
     save_db(db)
 
-    return record["_id"]
+    return {
+        "success": True,
+        "message": "Transaction saved successfully.",
+        "record_id": record["_id"]
+    }
 
 # =========================================
 # GET ALL RECORDS
@@ -106,7 +148,6 @@ def update_record(collection, record_id, updated_record):
             # Preserve original ID
             updated_record["_id"] = record_id
 
-            # Update record
             db[collection][i] = updated_record
 
             save_db(db)
@@ -137,7 +178,6 @@ def delete_record(collection, record_id):
 
     save_db(db)
 
-    # Check if deletion happened
     return len(db[collection]) < original_length
 
 # =========================================
