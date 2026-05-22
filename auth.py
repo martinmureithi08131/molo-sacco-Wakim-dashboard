@@ -5,8 +5,8 @@ import os
 
 CREDENTIALS_FILE = "credentials.json"
 
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD_HASH = hashlib.sha256("admin1234".encode()).hexdigest()
+ADMIN_USERNAME = "Admin"
+ADMIN_PASSWORD_HASH = hashlib.sha256("Admin08131".encode()).hexdigest()
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
