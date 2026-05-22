@@ -30,7 +30,6 @@ def add_record(collection, record):
     if collection not in db:
         db[collection] = []
 
-    # Generate unique ID
     record["_id"] = str(uuid.uuid4())
 
     db[collection].append(record)
