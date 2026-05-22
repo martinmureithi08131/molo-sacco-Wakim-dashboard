@@ -1,33 +1,142 @@
-import firebase_admin
-from firebase_admin import credentials, firestore
+import json
 import os
+import uuid
 
-_db = None
+DB_FILE = "database.json"
+
+# =========================================
+# LOAD DATABASE
+# =========================================
 
 def get_db():
-    global _db
-    if _db is None:
-        if not firebase_admin._apps:
-            key_path = os.path.join(os.path.dirname(__file__), "firebase_key.json")
-            cred = credentials.Certificate(key_path)
-            firebase_admin.initialize_app(cred)
-        _db = firestore.client()
-    return _db
 
-def add_record(table: str, record: dict):
-    db = get_db()
-    db.collection(table).add(record)
+    if not os.path.exists(DB_FILE):
 
-def get_records(table: str) -> list:
-    db = get_db()
-    docs = db.collection(table).stream()
-    records = []
-    for doc in docs:
-        data = doc.to_dict()
-        data["_id"] = doc.id
-        records.append(data)
-    return records
+        with open(DB_FILE, "w") as f:
+            json.dump(
+                {
+                    "daily_earnings": []
+                },
+                f,
+                indent=2
+            )
 
-def update_record(table: str, doc_id: str, updated_data: dict):
+    try:
+
+        with open(DB_FILE, "r") as f:
+            return json.load(f)
+
+    except:
+
+        return {
+            "daily_earnings": []
+        }
+
+# =========================================
+# SAVE DATABASE
+# =========================================
+
+def save_db(db):
+
+    with open(DB_FILE, "w") as f:
+        json.dump(db, f, indent=2)
+
+# =========================================
+# ADD RECORD
+# =========================================
+
+def add_record(collection, record):
+
     db = get_db()
-    db.collection(table).document(doc_id).update(updated_data)
+
+    if collection not in db:
+        db[collection] = []
+
+    # Prevent duplicates
+    for existing in db[collection]:
+
+        if (
+            existing.get("date")
+            == record.get("date")
+            and
+            existing.get("gross_earnings")
+            == record.get("gross_earnings")
+            and
+            existing.get("entered_by")
+            == record.get("entered_by")
+        ):
+
+            return {
+                "success": False,
+                "message": "Duplicate transaction detected."
+            }
+
+    record["_id"] = str(uuid.uuid4())
+
+    db[collection].append(record)
+
+    save_db(db)
+
+    return {
+        "success": True,
+        "message": "Transaction saved successfully."
+    }
+
+# =========================================
+# GET RECORDS
+# =========================================
+
+def get_records(collection):
+
+    db = get_db()
+
+    return db.get(collection, [])
+
+# =========================================
+# UPDATE RECORD
+# =========================================
+
+def update_record(collection, record_id, updated_record):
+
+    db = get_db()
+
+    if collection not in db:
+        return False
+
+    for i, record in enumerate(db[collection]):
+
+        if record["_id"] == record_id:
+
+            updated_record["_id"] = record_id
+
+            db[collection][i] = updated_record
+
+            save_db(db)
+
+            return True
+
+    return False
+
+# =========================================
+# DELETE RECORD
+# =========================================
+
+def delete_record(collection, record_id):
+
+    db = get_db()
+
+    if collection not in db:
+        return False
+
+    original_length = len(db[collection])
+
+    db[collection] = [
+
+        r for r in db[collection]
+
+        if r["_id"] != record_id
+    ]
+
+    save_db(db)
+
+    return len(db[collection]) < original_length
