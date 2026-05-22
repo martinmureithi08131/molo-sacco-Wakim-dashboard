@@ -1,272 +1,204 @@
 import streamlit as st
-import hashlib
-import json
-import os
+import pandas as pd
+from datetime import date
 
-# =========================================
-# CONFIG
-# =========================================
+from auth import (
+    render_login_page,
+    load_credentials,
+    register_user,
+    delete_user,
+    change_user_password
+)
 
-CREDENTIALS_FILE = "credentials.json"
+from database import (
+    add_record,
+    get_records,
+    delete_record,
+    update_record
+)
 
-ADMIN_USERNAME = "Admin"
-ADMIN_PASSWORD_HASH = hashlib.sha256(
-    "Admin08131".encode()
-).hexdigest()
+# =====================================
+# PAGE CONFIG
+# =====================================
 
-# =========================================
-# SESSION STATE
-# =========================================
+st.set_page_config(
+    page_title="MOLO SACCO",
+    page_icon="🚌",
+    layout="wide"
+)
+
+# =====================================
+# AUTH
+# =====================================
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
-if "username" not in st.session_state:
-    st.session_state["username"] = None
+if not st.session_state["authenticated"]:
+    render_login_page()
+    st.stop()
 
-if "role" not in st.session_state:
-    st.session_state["role"] = None
+role = st.session_state["role"]
+uname = st.session_state["username"]
 
-# =========================================
-# UTILITY FUNCTIONS
-# =========================================
+# =====================================
+# HELPERS
+# =====================================
 
-def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+def fmt_kes(x):
 
-
-def load_credentials() -> dict:
-    try:
-        if os.path.exists(CREDENTIALS_FILE):
-            with open(CREDENTIALS_FILE, "r") as f:
-                return json.load(f)
-    except:
-        return {}
-
-    return {}
+    return f"KES {float(x):,.0f}"
 
 
-def save_credentials(creds: dict):
-    with open(CREDENTIALS_FILE, "w") as f:
-        json.dump(creds, f, indent=2)
+def records_to_df():
 
+    rows = get_records("daily_earnings")
 
-def verify_user(username: str, password: str):
+    if not rows:
+        return pd.DataFrame()
 
-    # ADMIN LOGIN
-    if (
-        username == ADMIN_USERNAME
-        and hash_password(password) == ADMIN_PASSWORD_HASH
+    return pd.DataFrame(rows)
+
+# =====================================
+# SIDEBAR
+# =====================================
+
+with st.sidebar:
+
+    st.success(
+        f"Logged in as: {uname}"
+    )
+
+    if st.button("🚪 Logout"):
+
+        st.session_state.clear()
+
+        st.rerun()
+
+# =====================================
+# TITLE
+# =====================================
+
+st.title("🚌 MOLO SACCO Dashboard")
+
+tabs = ["📅 Add Record", "📋 Records"]
+
+if role == "admin":
+    tabs.append("⚙️ Admin")
+
+tabs = st.tabs(tabs)
+
+# =====================================
+# TAB 1
+# =====================================
+
+with tabs[0]:
+
+    st.subheader("📅 Add Daily Record")
+
+    entry_date = st.date_input(
+        "Date",
+        value=date.today()
+    )
+
+    gross = st.number_input(
+        "Gross Earnings",
+        min_value=0.0,
+        step=100.0
+    )
+
+    total_exp = st.number_input(
+        "Total Expenditures",
+        min_value=0.0,
+        step=100.0
+    )
+
+    net = gross - total_exp
+
+    st.info(
+        f"Net Income: {fmt_kes(net)}"
+    )
+
+    if st.button(
+        "💾 Save Record",
+        type="primary"
     ):
-        return "admin"
 
-    # NORMAL USER LOGIN
-    creds = load_credentials()
-
-    if (
-        username in creds
-        and creds[username]["password"] == hash_password(password)
-    ):
-        return "user"
-
-    return None
-
-
-def register_user(username: str, password: str):
-
-    if username == ADMIN_USERNAME:
-        return False, "Username reserved."
-
-    if len(username.strip()) < 3:
-        return False, "Username must be at least 3 characters."
-
-    if len(password) < 6:
-        return False, "Password must be at least 6 characters."
-
-    creds = load_credentials()
-
-    if username in creds:
-        return False, "Username already exists."
-
-    creds[username] = {
-        "password": hash_password(password)
-    }
-
-    save_credentials(creds)
-
-    return True, "User created successfully."
-
-
-def delete_user(username: str):
-
-    creds = load_credentials()
-
-    if username not in creds:
-        return False, "User not found."
-
-    del creds[username]
-
-    save_credentials(creds)
-
-    return True, f"User '{username}' deleted."
-
-
-def change_user_password(username: str, new_password: str):
-
-    if len(new_password) < 6:
-        return False, "Password must be at least 6 characters."
-
-    creds = load_credentials()
-
-    if username not in creds:
-        return False, "User not found."
-
-    creds[username]["password"] = hash_password(new_password)
-
-    save_credentials(creds)
-
-    return True, "Password updated."
-
-
-def logout():
-
-    st.session_state["authenticated"] = False
-    st.session_state["username"] = None
-    st.session_state["role"] = None
-
-    st.rerun()
-
-# =========================================
-# LOGIN PAGE
-# =========================================
-
-def render_login_page():
-
-    st.markdown("""
-    <style>
-
-    .login-wrap {
-        max-width: 420px;
-        margin: 60px auto 0;
-        padding: 40px 36px;
-        background: linear-gradient(
-            135deg,
-            #1a1a2e,
-            #16213e,
-            #0f3460
-        );
-        border-radius: 16px;
-        color: white;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-    }
-
-    .login-wrap h2 {
-        text-align:center;
-        margin-bottom:4px;
-        font-size:1.5rem;
-    }
-
-    .login-wrap p {
-        text-align:center;
-        opacity:.7;
-        font-size:.85rem;
-        margin-bottom:28px;
-    }
-
-    </style>
-
-    <div class="login-wrap">
-      <h2>🚌 MOLO SACCO</h2>
-      <p>KBW 066S · Nakuru ↔ Naivasha · Cashflow Dashboard</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    col = st.columns([1,2,1])[1]
-
-    with col:
-
-        username = st.text_input(
-            "Username",
-            placeholder="Enter username"
+        add_record(
+            "daily_earnings",
+            {
+                "date": str(entry_date),
+                "gross_earnings": gross,
+                "total_expenditures": total_exp,
+                "net_daily_income": net,
+                "entered_by": uname
+            }
         )
 
-        password = st.text_input(
-            "Password",
-            type="password",
-            placeholder="Enter password"
+        st.success(
+            "Record saved successfully."
         )
 
-        if st.button(
-            "🔐 Login",
-            use_container_width=True,
-            type="primary"
-        ):
+# =====================================
+# TAB 2
+# =====================================
 
-            if not username or not password:
-                st.error(
-                    "Please enter both username and password."
-                )
+with tabs[1]:
 
-            else:
+    st.subheader("📋 Records")
 
-                role = verify_user(username, password)
+    df = records_to_df()
 
-                if role:
+    if df.empty:
 
-                    st.session_state["authenticated"] = True
-                    st.session_state["username"] = username
-                    st.session_state["role"] = role
+        st.info("No records found.")
 
-                    st.rerun()
+    else:
 
-                else:
-                    st.error(
-                        "Invalid username or password."
-                    )
+        st.dataframe(
+            df.drop(columns=["_id"]),
+            use_container_width=True
+        )
 
-# =========================================
-# MAIN APP
-# =========================================
+# =====================================
+# TAB 3 ADMIN
+# =====================================
 
-def render_dashboard():
+if role == "admin":
 
-    st.sidebar.success(
-        f"Logged in as: {st.session_state['username']}"
-    )
+    with tabs[2]:
 
-    st.sidebar.button(
-        "🚪 Logout",
-        on_click=logout
-    )
+        st.subheader("⚙️ Admin Panel")
 
-    st.title("📊 MOLO SACCO Dashboard")
+        # =============================
+        # USERS
+        # =============================
 
-    st.write(
-        "Welcome to the cashflow management system."
-    )
+        st.markdown("## 👥 User Management")
 
-    # =====================================
-    # ADMIN PANEL
-    # =====================================
+        creds = load_credentials()
 
-    if st.session_state["role"] == "admin":
+        users = list(creds.keys())
 
-        st.divider()
+        if users:
 
-        st.subheader("👑 Admin Panel")
+            st.dataframe(
+                pd.DataFrame({
+                    "Users": users
+                }),
+                use_container_width=True
+            )
 
-        # ==============================
         # CREATE USER
-        # ==============================
 
-        with st.expander("➕ Create New User"):
+        with st.expander("➕ Create User"):
 
             new_user = st.text_input(
-                "New Username"
+                "Username"
             )
 
             new_pass = st.text_input(
-                "New Password",
+                "Password",
                 type="password"
             )
 
@@ -279,69 +211,24 @@ def render_dashboard():
 
                 if ok:
                     st.success(msg)
-
                 else:
                     st.error(msg)
 
-        # ==============================
-        # RESET PASSWORD
-        # ==============================
-
-        with st.expander("🔑 Reset User Password"):
-
-            creds = load_credentials()
-
-            if creds:
-
-                selected_user = st.selectbox(
-                    "Select User",
-                    list(creds.keys())
-                )
-
-                new_password = st.text_input(
-                    "New Password",
-                    type="password"
-                )
-
-                if st.button("Update Password"):
-
-                    ok, msg = change_user_password(
-                        selected_user,
-                        new_password
-                    )
-
-                    if ok:
-                        st.success(msg)
-
-                    else:
-                        st.error(msg)
-
-            else:
-                st.info("No users available.")
-
-        # ==============================
         # DELETE USER
-        # ==============================
 
         with st.expander("🗑 Delete User"):
 
-            creds = load_credentials()
+            if users:
 
-            if creds:
-
-                delete_target = st.selectbox(
-                    "Choose User",
-                    list(creds.keys()),
-                    key="delete_user"
+                del_user = st.selectbox(
+                    "Select User",
+                    users
                 )
 
-                if st.button(
-                    "Delete User",
-                    type="secondary"
-                ):
+                if st.button("Delete User"):
 
                     ok, msg = delete_user(
-                        delete_target
+                        del_user
                     )
 
                     if ok:
@@ -351,33 +238,157 @@ def render_dashboard():
                     else:
                         st.error(msg)
 
-            else:
-                st.info("No users found.")
+        # RESET PASSWORD
 
-        # ==============================
-        # VIEW USERS
-        # ==============================
+        with st.expander("🔑 Reset Password"):
 
-        with st.expander("👥 View Users"):
+            if users:
 
-            creds = load_credentials()
+                reset_user = st.selectbox(
+                    "Select User",
+                    users,
+                    key="reset"
+                )
 
-            if creds:
+                new_pw = st.text_input(
+                    "New Password",
+                    type="password"
+                )
 
-                st.write("Registered Users:")
+                if st.button(
+                    "Reset Password"
+                ):
 
-                for user in creds.keys():
-                    st.write(f"• {user}")
+                    ok, msg = change_user_password(
+                        reset_user,
+                        new_pw
+                    )
 
-            else:
-                st.info("No users registered.")
+                    if ok:
+                        st.success(msg)
 
-# =========================================
-# APP ROUTER
-# =========================================
+                    else:
+                        st.error(msg)
 
-if st.session_state["authenticated"]:
-    render_dashboard()
+        st.markdown("---")
 
-else:
-    render_login_page()
+        # =============================
+        # TRANSACTION MANAGEMENT
+        # =============================
+
+        st.markdown("## 📝 Manage Transactions")
+
+        tx_df = records_to_df()
+
+        if tx_df.empty:
+
+            st.info("No transactions found.")
+
+        else:
+
+            tx_df["display"] = (
+                tx_df["date"].astype(str)
+                + " | Gross: "
+                + tx_df["gross_earnings"].astype(str)
+            )
+
+            selected = st.selectbox(
+                "Select Transaction",
+                tx_df["display"]
+            )
+
+            row = tx_df[
+                tx_df["display"] == selected
+            ].iloc[0]
+
+            record_id = row["_id"]
+
+            edit_date = st.date_input(
+                "Edit Date",
+                value=pd.to_datetime(
+                    row["date"]
+                ).date()
+            )
+
+            edit_gross = st.number_input(
+                "Edit Gross Earnings",
+                value=float(
+                    row["gross_earnings"]
+                )
+            )
+
+            edit_exp = st.number_input(
+                "Edit Expenditures",
+                value=float(
+                    row["total_expenditures"]
+                )
+            )
+
+            edit_net = (
+                edit_gross - edit_exp
+            )
+
+            st.info(
+                f"Net: {fmt_kes(edit_net)}"
+            )
+
+            col1, col2 = st.columns(2)
+
+            # UPDATE
+
+            with col1:
+
+                if st.button(
+                    "💾 Update Transaction"
+                ):
+
+                    ok = update_record(
+                        "daily_earnings",
+                        record_id,
+                        {
+                            "date": str(edit_date),
+                            "gross_earnings": edit_gross,
+                            "total_expenditures": edit_exp,
+                            "net_daily_income": edit_net,
+                            "entered_by": row["entered_by"]
+                        }
+                    )
+
+                    if ok:
+
+                        st.success(
+                            "Transaction updated."
+                        )
+
+                        st.rerun()
+
+                    else:
+                        st.error(
+                            "Update failed."
+                        )
+
+            # DELETE
+
+            with col2:
+
+                if st.button(
+                    "🗑 Delete Transaction"
+                ):
+
+                    ok = delete_record(
+                        "daily_earnings",
+                        record_id
+                    )
+
+                    if ok:
+
+                        st.success(
+                            "Transaction deleted."
+                        )
+
+                        st.rerun()
+
+                    else:
+                        st.error(
+                            "Delete failed."
+                        )
