@@ -253,7 +253,33 @@ with tabs[1]:
         st.markdown('<div class="section-header">Daily Summary Table</div>', unsafe_allow_html=True)
         summary = view[["date","gross_earnings","total_expenditures","net_daily_income","entered_by"]].copy()
         summary["date"] = summary["date"].dt.strftime("%d %b %Y")
-        summary.columns = ["Date","Gross Earnings (KES)","Total Expenditures (KES)","Net Daily Income (KES)","Entered By"]
+        # Ensure required columns exist
+
+required_cols = [
+    "date",
+    "gross_earnings",
+    "total_expenditures",
+    "net_daily_income",
+    "entered_by"
+]
+
+for col in required_cols:
+
+    if col not in view.columns:
+
+        if col == "entered_by":
+
+            view[col] = "Unknown"
+
+        else:
+
+            view[col] = 0
+
+# Safe summary creation
+
+summary = view[
+    required_cols
+].copy()
         st.dataframe(summary.style.format({
             "Gross Earnings (KES)":      "KES {:,.0f}",
             "Total Expenditures (KES)":  "KES {:,.0f}",
