@@ -1,58 +1,90 @@
-from pymongo import MongoClient
-from bson import ObjectId
+import firebase_admin
+from firebase_admin import credentials, firestore
+import os
 
-# MongoDB Connection
-MONGO_URI = "YOUR_MONGODB_CONNECTION_STRING"
+_db = None
 
-client = MongoClient(MONGO_URI)
 
-db = client["molo_sacco_db"]
+def get_db():
+    global _db
+
+    if _db is None:
+
+        if not firebase_admin._apps:
+
+            key_path = os.path.join(
+                os.path.dirname(__file__),
+                "firebase_key.json"
+            )
+
+            cred = credentials.Certificate(key_path)
+
+            firebase_admin.initialize_app(cred)
+
+        _db = firestore.client()
+
+    return _db
 
 
 # ─────────────────────────────────────────────
 # ADD RECORD
 # ─────────────────────────────────────────────
-def add_record(table, data):
+def add_record(table: str, record: dict):
 
-    collection = db[table]
+    db = get_db()
 
-    collection.insert_one(data)
+    db.collection(table).add(record)
 
 
 # ─────────────────────────────────────────────
 # GET RECORDS
 # ─────────────────────────────────────────────
-def get_records(table):
+def get_records(table: str) -> list:
 
-    collection = db[table]
+    db = get_db()
 
-    return list(collection.find())
+    docs = db.collection(table).stream()
+
+    records = []
+
+    for doc in docs:
+
+        data = doc.to_dict()
+
+        data["_id"] = doc.id
+
+        records.append(data)
+
+    return records
 
 
 # ─────────────────────────────────────────────
 # UPDATE RECORD
 # ─────────────────────────────────────────────
-def update_record(table, record_id, updated_data):
+def update_record(table: str, record_id: str, updated_data: dict):
 
-    collection = db[table]
+    db = get_db()
 
-    result = collection.update_one(
-        {"_id": ObjectId(record_id)},
-        {"$set": updated_data}
-    )
+    try:
+        db.collection(table).document(record_id).update(updated_data)
 
-    return result.modified_count > 0
+        return True
+
+    except Exception:
+        return False
 
 
 # ─────────────────────────────────────────────
 # DELETE RECORD
 # ─────────────────────────────────────────────
-def delete_record(table, record_id):
+def delete_record(table: str, record_id: str):
 
-    collection = db[table]
+    db = get_db()
 
-    result = collection.delete_one(
-        {"_id": ObjectId(record_id)}
-    )
+    try:
+        db.collection(table).document(record_id).delete()
 
-    return result.deleted_count > 0
+        return True
+
+    except Exception:
+        return False
