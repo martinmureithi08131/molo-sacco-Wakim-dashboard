@@ -1,39 +1,169 @@
 import json
 import os
-from datetime import datetime
+import uuid
 
-DB_FILE = "data.json"
+# =========================================
+# DATABASE FILE
+# =========================================
 
-SCHEMA = {
-    "daily_earnings": [],
-    "expenses": [],
-    "maintenance": [],
-    "insurance": [],
-    "debts": [],
-    "projected": [],
-    "future_expenses": [],
-    "monthly_earnings": [],
-}
+DB_FILE = "database.json"
 
-def load_db() -> dict:
-    if os.path.exists(DB_FILE):
+# =========================================
+# LOAD DATABASE
+# =========================================
+
+def load_db():
+
+    # Create empty database if missing
+    if not os.path.exists(DB_FILE):
+
+        with open(DB_FILE, "w") as f:
+            json.dump({}, f)
+
+    try:
+
         with open(DB_FILE, "r") as f:
-            db = json.load(f)
-        for key in SCHEMA:
-            if key not in db:
-                db[key] = []
-        return db
-    return dict(SCHEMA)
+            return json.load(f)
 
-def save_db(db: dict):
+    except:
+
+        return {}
+
+# =========================================
+# SAVE DATABASE
+# =========================================
+
+def save_db(db):
+
     with open(DB_FILE, "w") as f:
-        json.dump(db, f, indent=2, default=str)
+        json.dump(db, f, indent=2)
 
-def add_record(table: str, record: dict):
+# =========================================
+# ADD RECORD
+# =========================================
+
+def add_record(collection, record):
+
     db = load_db()
-    record["_id"] = datetime.now().strftime("%Y%m%d%H%M%S%f")
-    db[table].append(record)
+
+    # Create collection if missing
+    if collection not in db:
+        db[collection] = []
+
+    # Generate unique transaction ID
+    record["_id"] = str(uuid.uuid4())
+
+    # Save record
+    db[collection].append(record)
+
     save_db(db)
 
-def get_records(table: str) -> list:
-    return load_db().get(table, [])
+    return record["_id"]
+
+# =========================================
+# GET ALL RECORDS
+# =========================================
+
+def get_records(collection):
+
+    db = load_db()
+
+    return db.get(collection, [])
+
+# =========================================
+# GET SINGLE RECORD
+# =========================================
+
+def get_record_by_id(collection, record_id):
+
+    db = load_db()
+
+    if collection not in db:
+        return None
+
+    for record in db[collection]:
+
+        if record.get("_id") == record_id:
+            return record
+
+    return None
+
+# =========================================
+# UPDATE RECORD
+# =========================================
+
+def update_record(collection, record_id, updated_record):
+
+    db = load_db()
+
+    if collection not in db:
+        return False
+
+    for i, record in enumerate(db[collection]):
+
+        if record.get("_id") == record_id:
+
+            # Preserve original ID
+            updated_record["_id"] = record_id
+
+            # Update record
+            db[collection][i] = updated_record
+
+            save_db(db)
+
+            return True
+
+    return False
+
+# =========================================
+# DELETE RECORD
+# =========================================
+
+def delete_record(collection, record_id):
+
+    db = load_db()
+
+    if collection not in db:
+        return False
+
+    original_length = len(db[collection])
+
+    db[collection] = [
+
+        record for record in db[collection]
+
+        if record.get("_id") != record_id
+    ]
+
+    save_db(db)
+
+    # Check if deletion happened
+    return len(db[collection]) < original_length
+
+# =========================================
+# CLEAR COLLECTION
+# =========================================
+
+def clear_collection(collection):
+
+    db = load_db()
+
+    if collection in db:
+
+        db[collection] = []
+
+        save_db(db)
+
+        return True
+
+    return False
+
+# =========================================
+# COUNT RECORDS
+# =========================================
+
+def count_records(collection):
+
+    db = load_db()
+
+    return len(db.get(collection, []))
