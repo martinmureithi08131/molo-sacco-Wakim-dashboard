@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.express as px
 from io import BytesIO
-from datetime import date
+from datetime import date, timedelta
 from auth import render_login_page, delete_user, change_user_password, load_credentials, register_user
-from database import add_record, get_records
+from database import add_record, get_records, update_record, delete_record
 
 st.set_page_config(
     page_title="MOLO SACCO – Daily Earnings",
@@ -34,16 +35,17 @@ st.markdown("""
     .metric-card.blue{background:linear-gradient(135deg,#2193b0,#6dd5ed);}
     .metric-card.green{background:linear-gradient(135deg,#11998e,#38ef7d);}
     .metric-card.red{background:linear-gradient(135deg,#eb3349,#f45c43);}
+    .metric-card.purple{background:linear-gradient(135deg,#667eea,#764ba2);}
     .metric-card h3{font-size:.8rem;margin:0 0 6px;opacity:.9;text-transform:uppercase;letter-spacing:.5px;}
     .metric-card h2{font-size:1.5rem;margin:0;font-weight:700;}
     .section-header{border-left:4px solid #667eea;padding-left:12px;
         margin:24px 0 12px;font-size:1.1rem;font-weight:600;}
-    .exp-row{background:#f8f9ff;border:1px solid #e0e4ff;border-radius:10px;padding:12px;margin-bottom:8px;}
-    .net-box{background:linear-gradient(135deg,#11998e,#38ef7d);border-radius:12px;
-        padding:20px;text-align:center;color:white;margin:16px 0;}
-    .net-box h3{margin:0 0 6px;font-size:.85rem;opacity:.9;text-transform:uppercase;}
-    .net-box h1{margin:0;font-size:2.2rem;font-weight:700;}
+    .net-box{border-radius:12px;padding:20px;text-align:center;color:white;margin:16px 0;}
+    .net-box.profit{background:linear-gradient(135deg,#11998e,#38ef7d);}
     .net-box.loss{background:linear-gradient(135deg,#eb3349,#f45c43);}
+    .net-box h3{margin:0 0 6px;font-size:.85rem;opacity:.9;text-transform:uppercase;}
+    .net-box h1{margin:0;font-size:2rem;font-weight:700;}
+    .week-badge{background:#667eea;color:white;padding:4px 12px;border-radius:20px;font-size:.8rem;font-weight:600;}
     .stDownloadButton>button{background:linear-gradient(135deg,#11998e,#38ef7d);
         color:#fff;border:none;border-radius:8px;padding:8px 18px;font-weight:600;}
 </style>
@@ -67,9 +69,14 @@ def to_excel_bytes(sheets):
 def records_to_df(table):
     rows = get_records(table)
     if not rows: return pd.DataFrame()
-    df = pd.DataFrame(rows)
-    if "_id" in df.columns: df = df.drop(columns=["_id"])
-    return df
+    return pd.DataFrame(rows)
+
+def get_week_range(ref_date=None):
+    """Returns (monday, sunday) of the week containing ref_date."""
+    ref = ref_date or date.today()
+    monday = ref - timedelta(days=ref.weekday())
+    sunday = monday + timedelta(days=6)
+    return monday, sunday
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -92,29 +99,41 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ── KPIs ──────────────────────────────────────────────────────────────────────
-all_records = records_to_df("daily_earnings")
+# ── Load all records ──────────────────────────────────────────────────────────
+all_df = records_to_df("daily_earnings")
+if not all_df.empty:
+    all_df["date"] = pd.to_datetime(all_df["date"])
+    for col in ["gross_earnings","total_expenditures","net_daily_income"]:
+        if col not in all_df.columns:
+            all_df[col] = 0.0
+        all_df[col] = pd.to_numeric(all_df[col], errors="coerce").fillna(0)
 
-total_gross = 0
-total_exp   = 0
-total_net   = 0
+# ── This week's data ──────────────────────────────────────────────────────────
+mon, sun = get_week_range()
+if not all_df.empty:
+    week_df = all_df[(all_df["date"].dt.date >= mon) & (all_df["date"].dt.date <= sun)]
+else:
+    week_df = pd.DataFrame()
 
-if not all_records.empty:
-    if "gross_earnings" in all_records.columns:
-        total_gross = pd.to_numeric(all_records["gross_earnings"], errors="coerce").sum()
-    if "total_expenditures" in all_records.columns:
-        total_exp = pd.to_numeric(all_records["total_expenditures"], errors="coerce").sum()
-    total_net = total_gross - total_exp
+# ── KPIs (this week) ─────────────────────────────────────────────────────────
+week_gross = week_df["gross_earnings"].sum()    if not week_df.empty else 0
+week_exp   = week_df["total_expenditures"].sum() if not week_df.empty else 0
+week_net   = week_df["net_daily_income"].sum()   if not week_df.empty else 0
+week_days  = len(week_df)                        if not week_df.empty else 0
 
-c1, c2, c3 = st.columns(3)
-with c1: st.markdown(f'<div class="metric-card blue"><h3>Total Gross Earnings</h3><h2>{fmt_kes(total_gross)}</h2></div>', unsafe_allow_html=True)
-with c2: st.markdown(f'<div class="metric-card red"><h3>Total Expenditures</h3><h2>{fmt_kes(total_exp)}</h2></div>', unsafe_allow_html=True)
-with c3: st.markdown(f'<div class="metric-card green"><h3>Total Net Income</h3><h2>{fmt_kes(total_net)}</h2></div>', unsafe_allow_html=True)
+st.markdown(f'<span class="week-badge">📅 This Week: {mon.strftime("%d %b")} – {sun.strftime("%d %b %Y")}</span>', unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
+
+c1,c2,c3,c4 = st.columns(4)
+with c1: st.markdown(f'<div class="metric-card blue"><h3>Week Gross Earnings</h3><h2>{fmt_kes(week_gross)}</h2></div>', unsafe_allow_html=True)
+with c2: st.markdown(f'<div class="metric-card red"><h3>Week Expenditures</h3><h2>{fmt_kes(week_exp)}</h2></div>', unsafe_allow_html=True)
+with c3: st.markdown(f'<div class="metric-card green"><h3>Week Net Income</h3><h2>{fmt_kes(week_net)}</h2></div>', unsafe_allow_html=True)
+with c4: st.markdown(f'<div class="metric-card purple"><h3>Days Recorded</h3><h2>{week_days} / 7</h2></div>', unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
-tab_labels = ["📅 Enter Daily Record", "📋 Records & Reports"]
+tab_labels = ["📅 Enter Daily Record", "📊 This Week", "📋 All Records"]
 if role == "admin":
     tab_labels.append("⚙️ Admin")
 tabs = st.tabs(tab_labels)
@@ -125,22 +144,18 @@ tabs = st.tabs(tab_labels)
 with tabs[0]:
     st.markdown('<div class="section-header">📅 Enter Daily Record</div>', unsafe_allow_html=True)
 
-    # ── Initialize expenditure rows in session state
     if "exp_rows" not in st.session_state:
         st.session_state.exp_rows = [{"description": "", "amount": 0.0}]
 
-    # ── Date & Gross Earnings
     col1, col2 = st.columns(2)
     with col1:
         entry_date = st.date_input("📆 Date", value=date.today())
     with col2:
         gross = st.number_input("💰 Gross Earnings (KES)", min_value=0.0, step=100.0, format="%.2f")
 
-    # ── Expenditures Section
     st.markdown('<div class="section-header">➕ Expenditures</div>', unsafe_allow_html=True)
     st.caption("Add each expenditure item with a description and amount.")
 
-    # Render each expenditure row
     for i, row in enumerate(st.session_state.exp_rows):
         col_a, col_b, col_c = st.columns([3, 2, 0.5])
         with col_a:
@@ -152,21 +167,18 @@ with tabs[0]:
         with col_b:
             st.session_state.exp_rows[i]["amount"] = st.number_input(
                 f"Amount (KES) #{i+1}", value=float(row["amount"]),
-                min_value=0.0, step=50.0, format="%.2f",
-                key=f"amt_{i}"
+                min_value=0.0, step=50.0, format="%.2f", key=f"amt_{i}"
             )
         with col_c:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🗑️", key=f"del_{i}", help="Remove this row"):
+            if st.button("🗑️", key=f"del_{i}", help="Remove"):
                 st.session_state.exp_rows.pop(i)
                 st.rerun()
 
-    # Add row button
-    if st.button("➕ Add Expenditure Item", use_container_width=False):
+    if st.button("➕ Add Expenditure Item"):
         st.session_state.exp_rows.append({"description": "", "amount": 0.0})
         st.rerun()
 
-    # ── Live Net Income Calculation
     total_exp_entry = sum(r["amount"] for r in st.session_state.exp_rows)
     net_income      = gross - total_exp_entry
 
@@ -175,97 +187,67 @@ with tabs[0]:
     with ea: st.markdown(f'<div class="metric-card blue"><h3>Gross Earnings</h3><h2>{fmt_kes(gross)}</h2></div>', unsafe_allow_html=True)
     with eb: st.markdown(f'<div class="metric-card red"><h3>Total Expenditures</h3><h2>{fmt_kes(total_exp_entry)}</h2></div>', unsafe_allow_html=True)
     with ec:
-        cls = "net-box" if net_income >= 0 else "net-box loss"
+        cls = "net-box profit" if net_income >= 0 else "net-box loss"
         st.markdown(f'<div class="{cls}"><h3>Net Daily Income</h3><h1>{fmt_kes(net_income)}</h1></div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-
-    # ── Save Button
     if st.button("💾 Save Daily Record", type="primary", use_container_width=True):
         if gross <= 0:
             st.error("❌ Please enter a gross earnings amount.")
         elif not any(r["description"].strip() for r in st.session_state.exp_rows):
             st.error("❌ Please add at least one expenditure with a description.")
         else:
-            # Build expenditure list (filter out blank rows)
             exp_list = [r for r in st.session_state.exp_rows if r["description"].strip()]
             add_record("daily_earnings", {
                 "date": str(entry_date),
                 "gross_earnings": gross,
-                "expenditures": exp_list,           # list of {description, amount}
+                "expenditures": exp_list,
                 "total_expenditures": total_exp_entry,
                 "net_daily_income": net_income,
                 "entered_by": uname,
             })
             st.success("✅ Daily record saved!")
-            # Reset form
             st.session_state.exp_rows = [{"description": "", "amount": 0.0}]
             st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 – Records & Reports
+# TAB 2 – This Week
 # ══════════════════════════════════════════════════════════════════════════════
 with tabs[1]:
-    st.markdown('<div class="section-header">📋 Records & Reports</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-header">📊 This Week\'s Records &nbsp;<span class="week-badge">{mon.strftime("%d %b")} – {sun.strftime("%d %b %Y")}</span></div>', unsafe_allow_html=True)
 
-    df = records_to_df("daily_earnings")
-    if df.empty:
-        st.info("No records yet. Enter a daily record in the first tab.")
+    if week_df.empty:
+        st.info("No records entered for this week yet.")
     else:
-        df["date"] = pd.to_datetime(df["date"])
-        for col in ["gross_earnings", "total_expenditures", "net_daily_income"]:
-            if col not in df.columns:
-                df[col] = 0.0
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-        df["Month"] = df["date"].dt.to_period("M").astype(str)
-
-        # Month filter
-        months = ["All"] + sorted(df["Month"].unique().tolist(), reverse=True)
-        sel = st.selectbox("Filter by Month", months)
-        view = df if sel == "All" else df[df["Month"] == sel]
-
-        # Summary metrics
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Days Recorded",       len(view))
-        m2.metric("Total Gross",         fmt_kes(view["gross_earnings"].sum()))
-        m3.metric("Total Expenditures",  fmt_kes(view["total_expenditures"].sum()))
-        m4.metric("Total Net Income",    fmt_kes(view["net_daily_income"].sum()))
-
         # Chart
         fig = go.Figure()
-        fig.add_trace(go.Bar(x=view["date"], y=view["gross_earnings"],
+        fig.add_trace(go.Bar(x=week_df["date"], y=week_df["gross_earnings"],
                              name="Gross Earnings", marker_color="#667eea"))
-        fig.add_trace(go.Bar(x=view["date"], y=view["total_expenditures"],
+        fig.add_trace(go.Bar(x=week_df["date"], y=week_df["total_expenditures"],
                              name="Expenditures", marker_color="#eb3349"))
-        fig.add_trace(go.Scatter(x=view["date"], y=view["net_daily_income"],
+        fig.add_trace(go.Scatter(x=week_df["date"], y=week_df["net_daily_income"],
                                  name="Net Income", mode="lines+markers",
                                  line=dict(color="#38ef7d", width=2.5)))
-        fig.update_layout(
-            barmode="group", height=400,
-            title="Daily Earnings vs Expenditures",
-            xaxis_title="Date", yaxis_title="KES",
-            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-            legend=dict(orientation="h", y=-0.25)
-        )
+        fig.update_layout(barmode="group", height=380,
+                          title=f"This Week: {mon.strftime('%d %b')} – {sun.strftime('%d %b %Y')}",
+                          plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                          legend=dict(orientation="h", y=-0.25))
         st.plotly_chart(fig, use_container_width=True)
 
-        # ── Detailed records table
-        st.markdown('<div class="section-header">Daily Summary Table</div>', unsafe_allow_html=True)
-        summary = view[["date","gross_earnings","total_expenditures","net_daily_income","entered_by"]].copy()
-        summary["date"] = summary["date"].dt.strftime("%d %b %Y")
-        summary.columns = ["Date","Gross Earnings (KES)","Total Expenditures (KES)","Net Daily Income (KES)","Entered By"]
-        st.dataframe(summary.style.format({
-            "Gross Earnings (KES)":      "KES {:,.0f}",
-            "Total Expenditures (KES)":  "KES {:,.0f}",
-            "Net Daily Income (KES)":    "KES {:,.0f}",
+        # Weekly summary table
+        disp = week_df[["date","gross_earnings","total_expenditures","net_daily_income","entered_by"]].copy()
+        disp["date"] = disp["date"].dt.strftime("%A, %d %b %Y")
+        disp.columns = ["Date","Gross Earnings (KES)","Total Expenditures (KES)","Net Income (KES)","Entered By"]
+        st.dataframe(disp.style.format({
+            "Gross Earnings (KES)":     "KES {:,.0f}",
+            "Total Expenditures (KES)": "KES {:,.0f}",
+            "Net Income (KES)":         "KES {:,.0f}",
         }), use_container_width=True, hide_index=True)
 
-        # ── Expenditure breakdown table
+        # Expenditure breakdown for this week
         st.markdown('<div class="section-header">Expenditure Breakdown</div>', unsafe_allow_html=True)
-        st.caption("All individual expenditure items across selected records.")
-
         exp_rows = []
-        for _, record in view.iterrows():
+        for _, record in week_df.iterrows():
             exp_list = record.get("expenditures", [])
             if isinstance(exp_list, list):
                 for item in exp_list:
@@ -274,32 +256,65 @@ with tabs[1]:
                         "Description": item.get("description",""),
                         "Amount (KES)": item.get("amount", 0),
                     })
-
         if exp_rows:
-            exp_breakdown = pd.DataFrame(exp_rows)
-            exp_breakdown["Amount (KES)"] = pd.to_numeric(exp_breakdown["Amount (KES)"], errors="coerce").fillna(0)
-
-            # Category totals
-            cat_totals = exp_breakdown.groupby("Description")["Amount (KES)"].sum().reset_index()
-            cat_totals = cat_totals.sort_values("Amount (KES)", ascending=False)
-
+            exp_bd = pd.DataFrame(exp_rows)
+            exp_bd["Amount (KES)"] = pd.to_numeric(exp_bd["Amount (KES)"], errors="coerce").fillna(0)
             col_a, col_b = st.columns([2,1])
             with col_a:
-                st.dataframe(exp_breakdown.style.format({"Amount (KES)": "KES {:,.0f}"}),
+                st.dataframe(exp_bd.style.format({"Amount (KES)":"KES {:,.0f}"}),
                              use_container_width=True, hide_index=True)
             with col_b:
-                import plotly.express as px
-                fig_pie = px.pie(cat_totals, names="Description", values="Amount (KES)",
-                                 title="Expenditure Categories", hole=0.4,
+                cat = exp_bd.groupby("Description")["Amount (KES)"].sum().reset_index()
+                fig_pie = px.pie(cat, names="Description", values="Amount (KES)",
+                                 title="By Category", hole=0.4,
                                  color_discrete_sequence=px.colors.qualitative.Pastel)
-                fig_pie.update_layout(height=320, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+                fig_pie.update_layout(height=300, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
                 st.plotly_chart(fig_pie, use_container_width=True)
-        else:
-            st.info("No expenditure details found.")
 
-        # ── Monthly summary
+        # Download this week
+        st.download_button(
+            "⬇️ Download This Week as Excel",
+            data=to_excel_bytes({"This Week": disp}),
+            file_name=f"week_{mon.strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_week"
+        )
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 3 – All Records
+# ══════════════════════════════════════════════════════════════════════════════
+with tabs[2]:
+    st.markdown('<div class="section-header">📋 All Records</div>', unsafe_allow_html=True)
+
+    if all_df.empty:
+        st.info("No records yet.")
+    else:
+        all_df["Month"] = all_df["date"].dt.to_period("M").astype(str)
+        months = ["All"] + sorted(all_df["Month"].unique().tolist(), reverse=True)
+        sel = st.selectbox("Filter by Month", months, key="all_month")
+        view = all_df if sel == "All" else all_df[all_df["Month"] == sel]
+
+        # Totals
+        m1,m2,m3,m4 = st.columns(4)
+        m1.metric("Days",            len(view))
+        m2.metric("Total Gross",     fmt_kes(view["gross_earnings"].sum()))
+        m3.metric("Total Expenses",  fmt_kes(view["total_expenditures"].sum()))
+        m4.metric("Total Net",       fmt_kes(view["net_daily_income"].sum()))
+
+        # Chart
+        fig2 = go.Figure()
+        fig2.add_trace(go.Bar(x=view["date"], y=view["gross_earnings"], name="Gross", marker_color="#667eea"))
+        fig2.add_trace(go.Bar(x=view["date"], y=view["total_expenditures"], name="Expenditures", marker_color="#eb3349"))
+        fig2.add_trace(go.Scatter(x=view["date"], y=view["net_daily_income"],
+                                  name="Net", mode="lines+markers", line=dict(color="#38ef7d",width=2)))
+        fig2.update_layout(barmode="group", height=360,
+                           plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                           legend=dict(orientation="h",y=-0.25))
+        st.plotly_chart(fig2, use_container_width=True)
+
+        # Monthly summary
         st.markdown('<div class="section-header">Monthly Summary</div>', unsafe_allow_html=True)
-        monthly = df.groupby("Month").agg(
+        monthly = all_df.groupby("Month").agg(
             Days=("date","count"),
             Gross=("gross_earnings","sum"),
             Expenditures=("total_expenditures","sum"),
@@ -311,37 +326,97 @@ with tabs[1]:
             "Net":"KES {:,.0f}","Cumulative Net":"KES {:,.0f}",
         }), use_container_width=True)
 
-        # ── Downloads
-        st.markdown('<div class="section-header">⬇️ Download Reports</div>', unsafe_allow_html=True)
-        dcol1, dcol2 = st.columns(2)
+        # Admin: edit / delete records
+        if role == "admin":
+            st.markdown('<div class="section-header">✏️ Edit or Delete a Record</div>', unsafe_allow_html=True)
+            st.caption("Select a record by date to edit or delete it.")
 
-        with dcol1:
-            tag = sel.replace("-","_") if sel != "All" else "All"
-            st.download_button(
-                "⬇️ Download Daily Summary as Excel",
-                data=to_excel_bytes({"Daily Summary": summary}),
-                file_name=f"daily_summary_{tag}.xlsx",
+            view_sorted = view.sort_values("date", ascending=False).copy()
+            view_sorted["label"] = view_sorted["date"].dt.strftime("%d %b %Y") + \
+                                   "  |  Gross: " + view_sorted["gross_earnings"].apply(fmt_kes) + \
+                                   "  |  Net: "   + view_sorted["net_daily_income"].apply(fmt_kes)
+
+            selected_label = st.selectbox("Select record", view_sorted["label"].tolist(), key="edit_select")
+            selected_row   = view_sorted[view_sorted["label"] == selected_label].iloc[0]
+            record_id      = selected_row["_id"]
+
+            action = st.radio("Action", ["✏️ Edit", "🗑️ Delete"], horizontal=True, key="edit_action")
+
+            if action == "🗑️ Delete":
+                st.warning(f"Are you sure you want to delete the record for **{selected_row['date'].strftime('%d %b %Y')}**?")
+                if st.button("🗑️ Confirm Delete", type="primary"):
+                    delete_record("daily_earnings", record_id)
+                    st.success("Record deleted.")
+                    st.rerun()
+
+            elif action == "✏️ Edit":
+                with st.form("edit_form"):
+                    st.markdown("**Edit Record**")
+                    ec1, ec2 = st.columns(2)
+                    with ec1:
+                        e_date  = st.date_input("Date", value=selected_row["date"].date())
+                    with ec2:
+                        e_gross = st.number_input("Gross Earnings (KES)",
+                                                  value=float(selected_row["gross_earnings"]),
+                                                  min_value=0.0, step=100.0)
+
+                    st.markdown("**Expenditures**")
+                    existing_exp = selected_row.get("expenditures", [])
+                    if not isinstance(existing_exp, list):
+                        existing_exp = []
+
+                    e_descs   = []
+                    e_amounts = []
+                    for j, item in enumerate(existing_exp):
+                        ec_a, ec_b = st.columns([3,2])
+                        with ec_a:
+                            e_descs.append(st.text_input(f"Description #{j+1}",
+                                           value=item.get("description",""), key=f"e_desc_{j}"))
+                        with ec_b:
+                            e_amounts.append(st.number_input(f"Amount #{j+1}",
+                                             value=float(item.get("amount",0)),
+                                             min_value=0.0, step=50.0, key=f"e_amt_{j}"))
+
+                    if st.form_submit_button("💾 Save Changes", type="primary", use_container_width=True):
+                        new_exp   = [{"description": d, "amount": a}
+                                     for d, a in zip(e_descs, e_amounts) if d.strip()]
+                        new_total = sum(i["amount"] for i in new_exp)
+                        new_net   = e_gross - new_total
+                        update_record("daily_earnings", record_id, {
+                            "date":               str(e_date),
+                            "gross_earnings":     e_gross,
+                            "expenditures":       new_exp,
+                            "total_expenditures": new_total,
+                            "net_daily_income":   new_net,
+                            "entered_by":         selected_row.get("entered_by",""),
+                        })
+                        st.success("✅ Record updated!")
+                        st.rerun()
+
+        # Download
+        st.markdown('<div class="section-header">⬇️ Download</div>', unsafe_allow_html=True)
+        dl_cols = st.columns(2)
+        with dl_cols[0]:
+            export = view[["date","gross_earnings","total_expenditures","net_daily_income","entered_by"]].copy()
+            export["date"] = export["date"].dt.strftime("%d %b %Y")
+            export.columns = ["Date","Gross (KES)","Expenditures (KES)","Net Income (KES)","Entered By"]
+            st.download_button("⬇️ Download Daily Summary",
+                data=to_excel_bytes({"Daily Summary": export}),
+                file_name=f"daily_summary_{sel}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="dl_summary"
-            )
-
-        with dcol2:
-            full_sheets = {"Daily Summary": summary, "Monthly Summary": monthly}
-            if exp_rows:
-                full_sheets["Expenditure Breakdown"] = pd.DataFrame(exp_rows)
-            st.download_button(
-                "⬇️ Download Full Report as Excel",
-                data=to_excel_bytes(full_sheets),
+                key="dl_daily")
+        with dl_cols[1]:
+            st.download_button("⬇️ Download Full Report",
+                data=to_excel_bytes({"Daily Summary": export, "Monthly Summary": monthly}),
                 file_name="MOLO_SACCO_full_report.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="dl_full"
-            )
+                key="dl_full")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 – Admin Panel
+# TAB 4 – Admin Panel
 # ══════════════════════════════════════════════════════════════════════════════
 if role == "admin":
-    with tabs[2]:
+    with tabs[3]:
         st.markdown('<div class="section-header">⚙️ Admin Panel – User Management</div>', unsafe_allow_html=True)
         creds     = load_credentials()
         all_users = list(creds.keys())
