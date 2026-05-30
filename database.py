@@ -1,46 +1,74 @@
-import json
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 import os
+import json
 from datetime import datetime
 
-DB_FILE = "data.json"
+SHEET_ID = "1LSB0XGF_0eS9w3DCom71aBymN5YwslMyyn6PDLKwgpo"
 
-SCHEMA = {
-    "daily_earnings": [],
-}
+def get_client():
+    scope = [
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    key_path = os.path.join(os.path.dirname(__file__), "google_key.json")
+    creds = ServiceAccountCredentials.from_json_keyfile_name(key_path, scope)
+    return gspread.authorize(creds)
 
-def load_db() -> dict:
-    if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r") as f:
-            db = json.load(f)
-        for key in SCHEMA:
-            if key not in db:
-                db[key] = []
-        return db
-    return dict(SCHEMA)
-
-def save_db(db: dict):
-    with open(DB_FILE, "w") as f:
-        json.dump(db, f, indent=2, default=str)
+def get_sheet(table: str):
+    client = get_client()
+    spreadsheet = client.open_by_key(SHEET_ID)
+    try:
+        worksheet = spreadsheet.worksheet(table)
+    except gspread.exceptions.WorksheetNotFound:
+        worksheet = spreadsheet.add_worksheet(title=table, rows=1000, cols=20)
+    return worksheet
 
 def add_record(table: str, record: dict):
-    db = load_db()
+    ws = get_sheet(table)
     record["_id"] = datetime.now().strftime("%Y%m%d%H%M%S%f")
-    db[table].append(record)
-    save_db(db)
+    # Serialize nested dicts/lists to JSON string
+    row = {k: json.dumps(v) if isinstance(v, (dict, list)) else v for k, v in record.items()}
+    existing = ws.get_all_records()
+    if not existing:
+        # Write header first
+        ws.append_row(list(row.keys()))
+    ws.append_row(list(row.values()))
 
 def get_records(table: str) -> list:
-    return load_db().get(table, [])
+    ws = get_sheet(table)
+    records = ws.get_all_records()
+    result = []
+    for rec in records:
+        parsed = {}
+        for k, v in rec.items():
+            if isinstance(v, str):
+                try:
+                    parsed[k] = json.loads(v)
+                except (json.JSONDecodeError, ValueError):
+                    parsed[k] = v
+            else:
+                parsed[k] = v
+        result.append(parsed)
+    return result
 
 def update_record(table: str, record_id: str, updated: dict):
-    db = load_db()
-    for i, rec in enumerate(db[table]):
-        if rec.get("_id") == record_id:
+    ws = get_sheet(table)
+    records = ws.get_all_records()
+    for i, rec in enumerate(records):
+        if str(rec.get("_id")) == str(record_id):
             updated["_id"] = record_id
-            db[table][i] = updated
+            row = {k: json.dumps(v) if isinstance(v, (dict, list)) else v for k, v in updated.items()}
+            # Row index is i+2 (1-based + header row)
+            headers = ws.row_values(1)
+            new_row = [row.get(h, "") for h in headers]
+            ws.update(f"A{i+2}", [new_row])
             break
-    save_db(db)
 
 def delete_record(table: str, record_id: str):
-    db = load_db()
-    db[table] = [r for r in db[table] if r.get("_id") != record_id]
-    save_db(db)
+    ws = get_sheet(table)
+    records = ws.get_all_records()
+    for i, rec in enumerate(records):
+        if str(rec.get("_id")) == str(record_id):
+            ws.delete_rows(i + 2)  # +2 for header and 1-based index
+            break
