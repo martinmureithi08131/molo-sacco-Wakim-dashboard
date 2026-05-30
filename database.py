@@ -20,10 +20,11 @@ def get_client():
 def get_sheet(table: str):
     client = get_client()
     spreadsheet = client.open_by_key(SHEET_ID)
-    try:
-        worksheet = spreadsheet.worksheet(table)
-    except gspread.exceptions.WorksheetNotFound:
+    sheet_names = [ws.title for ws in spreadsheet.worksheets()]
+    if table not in sheet_names:
         worksheet = spreadsheet.add_worksheet(title=table, rows=1000, cols=20)
+    else:
+        worksheet = spreadsheet.worksheet(table)
     return worksheet
 
 def add_record(table: str, record: dict):
