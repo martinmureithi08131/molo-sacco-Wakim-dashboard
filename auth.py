@@ -10,7 +10,7 @@ ADMIN_PASSWORD_HASH = hashlib.sha256("Admin08131".encode()).hexdigest()
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
-def get_creds_sheet():
+def get_spreadsheet():
     scope = [
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive"
@@ -20,12 +20,19 @@ def get_creds_sheet():
         scopes=scope
     )
     client = gspread.authorize(creds)
-    spreadsheet = client.open_by_key(SHEET_ID)
-    try:
-        ws = spreadsheet.worksheet("credentials")
-    except gspread.exceptions.WorksheetNotFound:
+    return client.open_by_key(SHEET_ID)
+
+def get_creds_sheet():
+    spreadsheet = get_spreadsheet()
+    sheet_names = [ws.title for ws in spreadsheet.worksheets()]
+    if "credentials" not in sheet_names:
         ws = spreadsheet.add_worksheet(title="credentials", rows=100, cols=3)
         ws.append_row(["username", "password"])
+    else:
+        ws = spreadsheet.worksheet("credentials")
+        # Ensure headers exist
+        if not ws.row_values(1):
+            ws.append_row(["username", "password"])
     return ws
 
 def load_credentials() -> dict:
