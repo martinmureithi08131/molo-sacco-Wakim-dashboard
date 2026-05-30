@@ -1,24 +1,43 @@
 import streamlit as st
 import hashlib
-import json
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 import os
 
-CREDENTIALS_FILE = "credentials.json"
+SHEET_ID = "1LSB0XGF_0eS9w3DCom71aBymN5YwslMyyn6PDLKwgpo"
 ADMIN_USERNAME = "Admin"
 ADMIN_PASSWORD_HASH = hashlib.sha256("Admin08131".encode()).hexdigest()
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
+def get_creds_sheet():
+    scope = [
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    key_path = os.path.join(os.path.dirname(__file__), "google_key.json")
+    creds = ServiceAccountCredentials.from_json_keyfile_name(key_path, scope)
+    client = gspread.authorize(creds)
+    spreadsheet = client.open_by_key(SHEET_ID)
+    try:
+        ws = spreadsheet.worksheet("credentials")
+    except gspread.exceptions.WorksheetNotFound:
+        ws = spreadsheet.add_worksheet(title="credentials", rows=100, cols=3)
+        ws.append_row(["username", "password"])
+    return ws
+
 def load_credentials() -> dict:
-    if os.path.exists(CREDENTIALS_FILE):
-        with open(CREDENTIALS_FILE, "r") as f:
-            return json.load(f)
-    return {}
+    ws = get_creds_sheet()
+    records = ws.get_all_records()
+    return {r["username"]: {"password": r["password"]} for r in records if r.get("username")}
 
 def save_credentials(creds: dict):
-    with open(CREDENTIALS_FILE, "w") as f:
-        json.dump(creds, f, indent=2)
+    ws = get_creds_sheet()
+    ws.clear()
+    ws.append_row(["username", "password"])
+    for username, data in creds.items():
+        ws.append_row([username, data["password"]])
 
 def verify_user(username: str, password: str) -> str | None:
     if username == ADMIN_USERNAME and hash_password(password) == ADMIN_PASSWORD_HASH:
