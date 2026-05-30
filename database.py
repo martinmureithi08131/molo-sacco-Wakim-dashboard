@@ -38,7 +38,25 @@ def add_record(table: str, record: dict):
 
 def get_records(table: str) -> list:
     ws = get_sheet(table)
-    records = ws.get_all_records()
+    try:
+        records = ws.get_all_records(numericise_ignore=["all"])
+    except Exception:
+        # Fallback: read raw values if headers have issues
+        all_values = ws.get_all_values()
+        if len(all_values) < 2:
+            return []
+        headers = all_values[0]
+        # Deduplicate headers
+        seen = {}
+        clean_headers = []
+        for h in headers:
+            if h in seen:
+                seen[h] += 1
+                clean_headers.append(f"{h}_{seen[h]}")
+            else:
+                seen[h] = 0
+                clean_headers.append(h)
+        records = [dict(zip(clean_headers, row)) for row in all_values[1:]]
     result = []
     for rec in records:
         parsed = {}
