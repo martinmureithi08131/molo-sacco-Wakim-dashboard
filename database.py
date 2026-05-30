@@ -1,6 +1,6 @@
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-import os
+from google.oauth2.service_account import Credentials
+import streamlit as st
 import json
 from datetime import datetime
 
@@ -11,8 +11,10 @@ def get_client():
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive"
     ]
-    key_path = os.path.join(os.path.dirname(__file__), "google_key.json")
-    creds = ServiceAccountCredentials.from_json_keyfile_name(key_path, scope)
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=scope
+    )
     return gspread.authorize(creds)
 
 def get_sheet(table: str):
@@ -27,11 +29,9 @@ def get_sheet(table: str):
 def add_record(table: str, record: dict):
     ws = get_sheet(table)
     record["_id"] = datetime.now().strftime("%Y%m%d%H%M%S%f")
-    # Serialize nested dicts/lists to JSON string
     row = {k: json.dumps(v) if isinstance(v, (dict, list)) else v for k, v in record.items()}
     existing = ws.get_all_records()
     if not existing:
-        # Write header first
         ws.append_row(list(row.keys()))
     ws.append_row(list(row.values()))
 
@@ -59,7 +59,6 @@ def update_record(table: str, record_id: str, updated: dict):
         if str(rec.get("_id")) == str(record_id):
             updated["_id"] = record_id
             row = {k: json.dumps(v) if isinstance(v, (dict, list)) else v for k, v in updated.items()}
-            # Row index is i+2 (1-based + header row)
             headers = ws.row_values(1)
             new_row = [row.get(h, "") for h in headers]
             ws.update(f"A{i+2}", [new_row])
@@ -70,5 +69,5 @@ def delete_record(table: str, record_id: str):
     records = ws.get_all_records()
     for i, rec in enumerate(records):
         if str(rec.get("_id")) == str(record_id):
-            ws.delete_rows(i + 2)  # +2 for header and 1-based index
+            ws.delete_rows(i + 2)
             break
