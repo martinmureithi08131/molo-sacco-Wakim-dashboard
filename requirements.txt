@@ -2,5 +2,5 @@ streamlit
 pandas
 plotly
 openpyxl
-pymongo
-bcrypt
+gspread
+oauth2client
