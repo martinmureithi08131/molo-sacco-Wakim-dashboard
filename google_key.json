@@ -1,13 +1,1 @@
-{
-  "type": "service_account",
-  "project_id": "molo-sacco-wakim-497907",
-  "private_key_id": "4829f9f3dafd56e68ec429d1a73c725cd5c15bad",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDaOeWyLXStcEMx\n2I1XNHdB4oIQUYYnMKbmwV4T6iLw9NU7PiXh6VgeErJ7JGKGnwyS9lB6Uh/WN0Vp\np02I9EQBz1++eWYIBAHkciRDHXnRcwJJUN0CjPjCU5ehzHiC/CWIrW17CNaUHVce\nW8g51Rt25epG+ehtSUg95B9b9oSbIMmV4ecL9pFOBlX4SporRWNiiPOLinAczE5c\npaEmYNFn/SiwT+J4z3TI0tPBuugM05gfoC1FcipCKf60aVyAo5V3jLK+UutEXdc1\nyAVm/bmWXYVOSUY7fjaAjEXDLWfk/EzG5hVLZvI6wRXusDaOI2Mm+bDIWsFgyY8Q\nE5rWgGqnAgMBAAECggEAInauTdtb5+Ao3IBkofcJNoB9JfKaCypl0V+Mafy6E++2\nlSqVdP4TCnzNbyEp5jTMGZGI2CiMGpqT/cGMPyrEarzDVCN795waaGeWTnsjN+6/\n17BLlxGIX7gv5D+UcKs9ij5JYfrdWHrhvUulbWy4b6iTvS3OhSPjotKaGT3vZ0gV\ni3dPuDcs1fkfPCJVN9K/p0dq9jIEcwo1JZkOibaMsI97xACHFLZnbx7O3LteXJQz\nBKNvO1MPo7JqEwOX3zAZcE+Xzs4a6qQVwolbVqisUZwtVbwMVZVsBrUX+Hr5RQA4\nZKVvXTf+5qJPdAJn1ZcZlukLt4WDPU74jXSNEEvt4QKBgQD5KUnKrK4nv8r4GeSt\nzeBdmV1D5VLJ4G+XNqU+1JVL56uvNdSsk3hq9fL/9/fiCwApCmkDz//87m4L5mKF\nJz73e/eWsY6LaWMKc5iaeFxO/bmoZOkGMDBtMP8hbmbVQd3Cyi63ETeNP22iFeSX\n4g1kmP8k53uIR2Da8gbY/xzh3wKBgQDgNz7waAREn6VZFrQ/hIZtRgC9zo8+B11z\n7OjiE+6vBwRYTDiMrr1JTb+S/uKoBKG6WnXXhR7McuXnSvFy6Jr3tWkUX1UTtGs7\nZ4f4Ns4P9nhB+miPJ08htTsn2p1F0CX5ayJq+Vj+nZo9bGnGWJv5wYJfJQ8KVMQf\n/3Nw8HHgOQKBgQClldzmhrAO1pVrILorD6FGUv/6eVL1uuQuWDClet3lXgdpH5tB\nPZhPbTibCA6C+NCYdcSotfjn/QTBf9CFsTlVe9tlGIck+1rIvV3zen3OOSzDTpzW\ncfwc9Oz5KMfKfkWEiJ1XKGgExNx1VZtfnOlNq6gUvIoKXXVuzF3kpFZrfQKBgQC+\nu4BY9cMbtUrtHDk9BzlrX29mB38m3xEKenApUZdrYOa7TiuU0VjIMNFU9GpPT5Fc\ne3NfYSiv9tXICaKXg3PAYJwA7o/q8UF/CTVLWyOzxJDMX33uuRvBqu+lmXzMVKLZ\nJ9/hbDfecKcytTTNu7cDoS+MTHQc77rfFWlYm9HjUQKBgEB/WdQiPpOj85ADMXHo\nuikmcHVieKCNgswKZsYJw2BJYEFRXswWgZC+H8SZr3WlR/I3qTZQd7m2Du6f4ODU\nic8Be9Bxw1tPuEpFxtHiAsj8km0xUOm9sQDF3aOmREzZBFFg5FzDDRPEnG/2Dy/o\nEnaBPvGNLjEDxL7l5tDpRwlC\n-----END PRIVATE KEY-----\n",
-  "client_email": "molo-sacco-sheets@molo-sacco-wakim-497907.iam.gserviceaccount.com",
-  "client_id": "102218807101898170758",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/molo-sacco-sheets%40molo-sacco-wakim-497907.iam.gserviceaccount.com",
-  "universe_domain": "googleapis.com"
-}
+
