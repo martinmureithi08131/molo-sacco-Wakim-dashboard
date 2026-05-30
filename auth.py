@@ -1,8 +1,7 @@
 import streamlit as st
 import hashlib
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-import os
+from google.oauth2.service_account import Credentials
 
 SHEET_ID = "1LSB0XGF_0eS9w3DCom71aBymN5YwslMyyn6PDLKwgpo"
 ADMIN_USERNAME = "Admin"
@@ -16,8 +15,10 @@ def get_creds_sheet():
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive"
     ]
-    key_path = os.path.join(os.path.dirname(__file__), "google_key.json")
-    creds = ServiceAccountCredentials.from_json_keyfile_name(key_path, scope)
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=scope
+    )
     client = gspread.authorize(creds)
     spreadsheet = client.open_by_key(SHEET_ID)
     try:
